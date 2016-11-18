@@ -46,6 +46,7 @@ __global__ void selection_of_knn(float *distlist, int *indlist,int listpitch, in
 	int b,c;//divfact for the dividing the sequence in the second bitonic sort step, 
 	//initialization to 2 for the second stage of sorting as we devide the sequence into two lists and so on 
 	float var, var1;
+	int var2 = 0;
 	//for bitonic diffrent stage sorting
 	int move = mval / 2;
 
@@ -76,7 +77,7 @@ __global__ void selection_of_knn(float *distlist, int *indlist,int listpitch, in
 				//insert to the first level m
 				insertion_sort(knnqueue, 0, qpitch, m, thx);
 				locmax = knnqueue[thx];
-				while((locmax < knnqueue[mval*qpitch + thx])/*&&(mval<=k)*/){				
+				while((locmax < knnqueue[mval*qpitch + thx])&&(mval<=k)){				
 						//first bitonic sort step(two sorted list in decreasing order)
 						for (int a = mval*qpitch + thx; (a<k*qpitch+thx)&&(a < (2 * mval*qpitch) + thx); a += qpitch){
 							if (knnqueue[a] > knnqueue[a - varpitch]){
@@ -135,14 +136,14 @@ __global__ void selection_of_knn(float *distlist, int *indlist,int listpitch, in
 		//if the head of the second level is less than that of the first one of size m
 	
 	}//end of thx<numofpoint	
-	/*if (thx == 66){
+	if (thx == 4000){
 		for (int y = thx; y < (k*qpitch)+thx; y += qpitch){
 			printf("last result: %d	%f\n", var2, knnqueue[y]);
 			var2+=1;
 		}
 		printf("\n");
 
-	}*/
+	}
 	}
 
 
@@ -154,7 +155,7 @@ int main(){
 	cudaEventCreate(&stop);
 	int width =8192;//query points
 	int height =32768;//ref points 
-	int k =512;
+	int k =1024;
 	size_t lpitch;
 	size_t qpitch;
 	cudaError_t val;
