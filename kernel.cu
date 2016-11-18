@@ -4,7 +4,7 @@
 #include <iostream>
 #include <algorithm> 
 #include <time.h>
-
+// Github https://github.com/ywattar/Cuda-K-nearest-neighbor-
 //__device__ void swap(int i, int j) {
 //	float t;
 //	float *a=new float[];
@@ -17,7 +17,7 @@
  __device__ void insertion_sort(float* knnqueue, int* knnqueueind, int qpitch, int k, int threadId){
 	 int n, o;
 	float var;
-	 for (o = threadId; o < k*qpitch+threadId; o += qpitch){
+	 for (o = threadId; o < k*qpitch; o += qpitch){
 		 n = o;
 		 while (n > threadId){
 			 if (knnqueue[n] >knnqueue[n - qpitch]){
