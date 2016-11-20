@@ -4,7 +4,7 @@
 #include <iostream>
 #include <algorithm> 
 #include <time.h>
-// Github https://github.com/ywattar/Cuda-K-nearest-neighbor-
+
 //__device__ void swap(int i, int j) {
 //	float t;
 //	float *a=new float[];
@@ -33,7 +33,7 @@
 
  }
 __global__ void selection_of_knn(float *distlist, int *indlist,int listpitch, int k, int numofpoint, int refdimofpoint,
-	float *knnqueue, int *knnqueueind,int qpitch, int m,volatile int* result)
+	float *knnqueue, int *knnqueueind,int qpitch, int m,volatile  int result)
 //the visibility of memory operations on the result variable is ensured by declaring it as volatile
 //From Nvidia documentation.
 {
@@ -43,6 +43,8 @@ __global__ void selection_of_knn(float *distlist, int *indlist,int listpitch, in
 	float locmax;
 	int	j = 0;
 	int varpitch=qpitch;
+	__shared__ int flags[16];
+	int *flag = &flags[threadIdx.x / 32];
 	int b,c;//divfact for the dividing the sequence in the second bitonic sort step, 
 	//initialization to 2 for the second stage of sorting as we devide the sequence into two lists and so on 
 	float var, var1;
@@ -77,7 +79,18 @@ __global__ void selection_of_knn(float *distlist, int *indlist,int listpitch, in
 				//insert to the first level m
 				insertion_sort(knnqueue, 0, qpitch, m, thx);
 				locmax = knnqueue[thx];
-				while((locmax < knnqueue[mval*qpitch + thx])&&(mval<=k)){				
+
+				flag[threadIdx.x/32] = 0;
+				
+				while((locmax < knnqueue[mval*qpitch + thx])&&(mval<=k)){
+				/*	if (locmax < knnqueue[mval*qpitch + thx])
+				{
+					flag[threadIdx.x / 32] = 1;
+				}
+				if (flag[threadIdx.x / 32] == 0){
+					break;
+				}*/
+					//*flag = 1;
 						//first bitonic sort step(two sorted list in decreasing order)
 						for (int a = mval*qpitch + thx; (a<k*qpitch+thx)&&(a < (2 * mval*qpitch) + thx); a += qpitch){
 							if (knnqueue[a] > knnqueue[a - varpitch]){
@@ -85,9 +98,9 @@ __global__ void selection_of_knn(float *distlist, int *indlist,int listpitch, in
 								knnqueue[a] = knnqueue[a - varpitch];
 								knnqueue[a - varpitch] = var;
 							}
-							else{
-								break;//to finish the first bitonic step at the size of the previous level in the queue 
-							}
+							//else{
+							//	break;//to finish the first bitonic step at the size of the previous level in the queue 
+							//}
 							varpitch += 2 * qpitch;
 
 						}//end of for
@@ -127,7 +140,9 @@ __global__ void selection_of_knn(float *distlist, int *indlist,int listpitch, in
 							mval =mval* 2;
 							move = mval / 2;
 							varpitch = qpitch;
+							
 					}//the end of bitonic sort process for merging levels
+				
 			}
 			locmax = knnqueue[thx];//re_assigning the locmax to the head of the first level in the queue
 		}
@@ -136,7 +151,7 @@ __global__ void selection_of_knn(float *distlist, int *indlist,int listpitch, in
 		//if the head of the second level is less than that of the first one of size m
 	
 	}//end of thx<numofpoint	
-	if (thx == 4000){
+	if (thx == 0){
 		for (int y = thx; y < (k*qpitch)+thx; y += qpitch){
 			printf("last result: %d	%f\n", var2, knnqueue[y]);
 			var2+=1;
@@ -155,7 +170,7 @@ int main(){
 	cudaEventCreate(&stop);
 	int width =8192;//query points
 	int height =32768;//ref points 
-	int k =1024;
+	int k =512;
 	size_t lpitch;
 	size_t qpitch;
 	cudaError_t val;
@@ -169,8 +184,8 @@ int main(){
 
 	// generate the input array on the host/
 	for (int i = 0; i < width*height; i++)
-		l_in[i] = (float)rand() / (float)RAND_MAX;
-		//l_in[i] = width*height- i;//should be used for testing bitonic sort
+		//l_in[i] = (float)rand() / (float)RAND_MAX;
+		l_in[i] = width*height- i;//should be used for testing bitonic sort
 	//float l_in[20] = {20,21,16,14,22,23,24,8,30,32,0,5,4,3,2,1,0,6,2,7};
 	val=cudaMallocPitch((void **) & d_indistqueue, &qpitch, width*sizeof(float), k);
 	val=cudaMallocPitch((void **) &d_list, &lpitch, width*sizeof(float), height);
