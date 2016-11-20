@@ -44,7 +44,7 @@ __global__ void selection_of_knn(float *distlist, int *indlist, int listpitch, i
 	int	j = 0;
 	int varpitch = qpitch;
 	__shared__ int flags[16];
-	int *flag = &flags[threadIdx.x / 32];
+	volatile int *flag = &flags[threadIdx.x / 32];
 	int b, c;//divfact for the dividing the sequence in the second bitonic sort step, 
 	//initialization to 2 for the second stage of sorting as we devide the sequence into two lists and so on 
 	float var, var1;
@@ -80,7 +80,18 @@ __global__ void selection_of_knn(float *distlist, int *indlist, int listpitch, i
 				insertion_sort(knnqueue, 0, qpitch, m, thx);
 				locmax = knnqueue[thx];
 
-				while ((locmax < knnqueue[mval*qpitch + thx]) && (mval <= k)){				
+
+				while (/*(locmax < knnqueue[mval*qpitch + thx])&&*/(mval <= k)){
+					flag[threadIdx.x / 32] = 0;
+
+					if (locmax < knnqueue[mval*qpitch + thx])
+					{
+						flag[threadIdx.x / 32] = 1;
+					}
+					if (flag[threadIdx.x / 32] == 0){
+						break;
+					}
+					//*flag = 1;
 					//first bitonic sort step(two sorted list in decreasing order)
 					for (int a = mval*qpitch + thx; (a<k*qpitch + thx) && (a < (2 * mval*qpitch) + thx); a += qpitch){
 						if (knnqueue[a] > knnqueue[a - varpitch]){
@@ -112,6 +123,12 @@ __global__ void selection_of_knn(float *distlist, int *indlist, int listpitch, i
 									}*/
 								}
 
+								/*if (knnqueue[b + mval*qpitch] < knnqueue[b + (mval + move)*qpitch]){
+								var2 = knnqueue[b + mval*qpitch];
+								knnqueue[b + mval*qpitch] = knnqueue[b + (mval + move)*qpitch];
+								knnqueue[b + (mval + move)*qpitch] = var2;
+								}*/
+
 							}
 						}
 
@@ -135,14 +152,14 @@ __global__ void selection_of_knn(float *distlist, int *indlist, int listpitch, i
 		//if the head of the second level is less than that of the first one of size m
 
 	}//end of thx<numofpoint	
-	if (thx == 0){
-		for (int y = thx; y < (k*qpitch) + thx; y += qpitch){
-			printf("last result: %d	%f\n", var2, knnqueue[y]);
-			var2 += 1;
-		}
-		printf("\n");
+	//if (thx == 0){
+	//	for (int y = thx; y < (k*qpitch) + thx; y += qpitch){
+	//		printf("last result: %d	%f\n", var2, knnqueue[y]);
+	//		var2 += 1;
+	//	}
+	//	printf("\n");
 
-	}
+	//}
 }
 
 
@@ -169,7 +186,7 @@ int main(){
 	// generate the input array on the host/
 	for (int i = 0; i < width*height; i++)
 		l_in[i] = (float)rand() / (float)RAND_MAX;
-		//l_in[i] = width*height - i;//should be used for testing bitonic sort
+	//l_in[i] = width*height- i;//should be used for testing bitonic sort
 	//float l_in[20] = {20,21,16,14,22,23,24,8,30,32,0,5,4,3,2,1,0,6,2,7};
 	val = cudaMallocPitch((void **)& d_indistqueue, &qpitch, width*sizeof(float), k);
 	val = cudaMallocPitch((void **)&d_list, &lpitch, width*sizeof(float), height);
@@ -181,13 +198,15 @@ int main(){
 	cudaMemcpy2D(d_indistqueue, qpitch, qh_in, width*sizeof(float), width*sizeof(float), k, cudaMemcpyHostToDevice);
 	cudaMemcpy2D(d_list, lpitch, l_in, width*sizeof(float), width*sizeof(float), height, cudaMemcpyHostToDevice);
 	// launch the kernel
-	dim3 Grid(width / 128 + 1, 1, 1);
-	dim3 threads(128, 1);
+	dim3 Grid(width / 512 + 1, 1, 1);
+	dim3 threads(512, 1);
 	cudaEventRecord(start, 0);
 	selection_of_knn << <Grid, threads >> >(d_list, 0, lpitch / sizeof(float), k, width, height, d_indistqueue, 0, qpitch / sizeof(float), 8, 0);
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
+
 	//bitonic_finalize_col<<<1,1>>>(d_indistqueue,1,1,8);
+
 	//
 	// copy back the result array to the CPU
 	cudaMemcpy2D(h_out, width*sizeof(float), d_indistqueue, qpitch, width*sizeof(float), k, cudaMemcpyDeviceToHost);
@@ -201,6 +220,7 @@ int main(){
 	printf("dequeue: %d	%f\n", j, h_out[j]);
 	*/
 	printf("The required time:	%f\n", milliseconds / 1000);
+
 	cudaFree(d_indistqueue);
 	cudaFree(d_list);
 	return 0;
